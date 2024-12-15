@@ -5,6 +5,7 @@ import random
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing  import StandardScaler
+from sklearn.inspection import permutation_importance
 
 from sklearn.linear_model import LinearRegression
 from sklearn.tree import DecisionTreeRegressor
@@ -30,15 +31,18 @@ import warnings
 warnings.filterwarnings("ignore")
 
 def read_csv(url):
+    
     """
     Takes in the url of the dataset
     Reads it into a Pandas DataFrame
+    
     Returns DataFrame 
     """
     df = pd.read_csv(url)
     return df
 
 def preprocessing(df):
+    
     """
     This function takes in the DataFrame
     Cleans, transforms, and prepares it
@@ -143,6 +147,7 @@ X, y, X_train, X_test, X_val, y_train, y_test, y_val = preprocessing(df)
 
 
 def baseline_model(X_train, y_train):
+    
     """
     This function instantiates a Linear Regressor
     Fits it to the train data
@@ -155,6 +160,7 @@ def baseline_model(X_train, y_train):
     return lr_model
 
 def model_one(X_train, y_train):
+    
     """
     This function instantiates a Decision Tree Regressor
     With some parameters like, criterion, maximum depth, & minimuum samples split
@@ -173,7 +179,8 @@ def model_one(X_train, y_train):
     return dt_model
 
 def model_two(X_train, y_train):
-     """
+    
+    """
     This function instantiates a Kneighbors Regressor
     With some parameters like, number of neighbors, weights, & metrics
     Fits it to the train data
@@ -190,7 +197,8 @@ def model_two(X_train, y_train):
     return kn_model
 
 def model_three(X_train, y_train):
-     """
+    
+    """
     This function instantiates a Random Forest Regressor
     With some parameters like, number of estimators, maximum depth, & maximum features
     Fits it to the train data
@@ -208,6 +216,15 @@ def model_three(X_train, y_train):
 
 def model_four(X_train, y_train, X_val, y_val):
     
+    """
+    This function instantiates a Sequential Model from tensor flow
+    With some parameters like, hidden layers, neurons, regularizers, & activation functions
+    Compiles the model using mean_squared_error and Adam as the optimizer
+    
+    Fits it to the train data with some validation data passed to check progress
+
+    Returns the fitted model
+    """
     #set random seed for reproducibility
     seed = 36
     tf.random.set_seed(seed)
@@ -280,8 +297,73 @@ def model_four(X_train, y_train, X_val, y_val):
     
     return nn_model
 
+def feature_importances(model, X, X_val=None, y_val=None):
+
+    """
+    This function calculates and plots feature importances for a given model
+
+    Args:
+        model: The trained machine learning model.
+        X: The feature matrix.
+        X_val: The validation feature matrix (optional, used for permutation importance)
+        y_val: The validation target variable (optional, used for permutation importance)
+
+    Returns figure
+    """
+
+    if isinstance(model, LinearRegression):
+        feature_importance = pd.DataFrame(
+            {
+                "Feature": X.columns,
+                "Importance": model.coef_
+            }
+        )
+
+    elif isinstance(model, (DecisionTreeRegressor, RandomForestRegressor)):
+        feature_importance = pd.DataFrame(
+            {
+                "Feature": X.columns,
+                "Importance": model.feature_importances_
+            }
+        )
+
+    else:
+        #check if X_val and y_val are provided
+        if X_val is None or y_val is None:
+            raise ValueError("X_val and y_val are required for permutation importance.")
+
+        perm_importance = permutation_importance(model,
+                                                 X_val,
+                                                 y_val,
+                                                 n_repeats=10,
+                                                 scoring="neg_mean_squared_error",
+                                                 random_state=36)
+        feature_importance = pd.DataFrame(
+            {
+                "Feature": X.columns,
+                "Importance": perm_importance.importances_mean
+            }
+        )
+
+    #sort features in order of importance
+    feature_importance = feature_importance.sort_values(by="Importance", ascending=False)
+
+    #plot features importance
+    figure = plt.figure(figsize=(10, 6))
+    sns.barplot(x="Importance", y="Feature", data=feature_importance)
+    plt.title("Feature Importance")
+    plt.xlabel("Importance")
+    plt.ylabel("Feature")
+    plt.show()
+
+    return figure
+
+#plot features importance for model three
+model3 = model_three(X_train, y_train)
+feature_importances(model3, X)
 
 def evaluate_model(model, X_test, y_test):
+    
     """
     This function takes in the model, gets predictions 
     Evaluates test sets
@@ -327,6 +409,14 @@ def compare_model(
         y_pred3, 
         y_pred4,
 ):
+    
+    """
+    This function takes in the actual price and price predictions of the models
+    Creates a dataframe to store actual price and price predictions
+    Creates a dataframe to store metrics
+
+    Returns price predictions and metrics dataframe
+    """
     #create a df to compare prices
     price_comparison = pd.DataFrame({
         "Actual Price" : y_test,
@@ -380,6 +470,13 @@ price_comparison, metrics_df = compare_model(
     y_pred4)
 
 def plot_predictions(y_test, predictions, y_label="", title=""):
+    
+    """
+    This function takes in the actual prices and predicted prices
+    Makes a plot of actual vs predictions
+
+    Returns plot
+    """
     figure = plt.figure(figsize=(10, 6))
 
     plt.scatter(y_test, y_test, color="blue", label="Test Data")
@@ -391,7 +488,18 @@ def plot_predictions(y_test, predictions, y_label="", title=""):
 
     return figure
 
+#get plot predictions for baseline
+plot_predictions(y_test, y_pred_baseline)
+
 def plot_comparison(metrics_df):
+
+    """
+    This function takes in a dataframe of metrics
+    Retrieves metrics RMSE and R2
+    Makes two plots to compare RMSE and R2 across models
+
+    Returns plots
+    """
     #plot rmse
     fig1 = px.bar(
         metrics_df,
@@ -437,15 +545,3 @@ def plot_comparison(metrics_df):
     return fig1, fig2
 
 fig1, fig2 = plot_comparison(metrics_df)
-
-
-
-
-
-
-
-
-
-print(f"Baseline Model - Root Mean Squared Error: {rmse_baseline:.2f}")
-print(f"Baseline Model - R-squared Score: {r2_baseline:.2f}")
-
